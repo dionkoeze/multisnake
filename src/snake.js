@@ -30,6 +30,10 @@ class Coord {
         }
     }
 
+    equals(other) {
+        return this.x === other.x && this.y === other.y;
+    }
+
     getNeighbor(mapX, mapY) {
         const x = this.world.applyBoundaryX(mapX(this.x));
         const y = this.world.applyBoundaryY(mapY(this.y));
@@ -38,19 +42,19 @@ class Coord {
     }
 
     getEast() {
-        return getNeighbor(x => x + 1, y => y);
+        return this.getNeighbor(x => x + 1, y => y);
     }
 
     getWest() {
-        return getNeighbor(x => x - 1, y => y);
+        return this.getNeighbor(x => x - 1, y => y);
     }
 
     getNorth() {
-        return getNeighbor(x => x, y => y - 1);
+        return this.getNeighbor(x => x, y => y - 1);
     }
 
     getSouth() {
-        return getNeighbor(x => x, y => y + 1);
+        return this.getNeighbor(x => x, y => y + 1);
     }
 }
 
@@ -66,15 +70,46 @@ class Snake {
         this.body.push(new Coord(this.world, 12,6));
     }
 
-    step(move) {
-        if (move === 'up') {
-            moveUp();
-        } else if (move === 'down') {
-            moveDown();
-        } else if (move === 'left') {
-            moveLeft();
-        } else if (move === 'right') {
-            moveRight();
+    getOrientation() {
+        let first = this.body[0];
+        let second = this.body[1];
+
+        if (second.equals(first.getNorth())) {
+            return Direction.Down;
+        } else if (second.equals(first.getSouth())) {
+            return Direction.Up;
+        } else if (second.equals(first.getEast())) {
+            return Direction.Left;
+        } else if (second.equals(first.getWest())) {
+            return Direction.Right;
+        }
+    }
+
+    step(newCoord) {
+        this.body.unshift(newCoord);
+        this.body.pop();
+    }
+
+    tick(move) {
+        let orientation = this.getOrientation();
+        let head = this.body[0];
+
+        if (move === Direction.Up && orientation !== Direction.Down) {
+            this.step(head.getNorth());
+        } else if (move === Direction.Down && orientation !== Direction.Up) {
+            this.step(head.getSouth());
+        } else if (move === Direction.Left && orientation !== Direction.Right) {
+            this.step(head.getWest());
+        } else if (move === Direction.Right && orientation !== Direction.Left) {
+            this.step(head.getEast());
+        } else if (orientation === Direction.Up) {
+            this.step(head.getNorth());
+        } else if (orientation === Direction.Down) {
+            this.step(head.getSouth());
+        } else if (orientation === Direction.Left) {
+            this.step(head.getWest());
+        } else if (orientation === Direction.Right) {
+            this.step(head.getEast());
         }
     }
 
@@ -89,6 +124,13 @@ class Snake {
 
             drawer.drawCell(segment.x, segment.y, color);
         })
+    }
+}
+
+class SnakeBox {
+    constructor(snake) {
+        this.snake = snake;
+        this.move = null;
     }
 }
 
@@ -107,11 +149,11 @@ class World {
     constructor(sizeX, sizeY) {
         this.sizeX = sizeX;
         this.sizeY = sizeY;
-        this.snakes = [];
+        this.boxedSnakes = [];
         this.apples = [];
 
         // temp
-        this.snakes.push(new Snake());
+        this.boxedSnakes.push(new SnakeBox(new Snake(this)));
         this.apples.push(new Apple(15, 17));
     }
 
@@ -132,15 +174,19 @@ class World {
     }
 
     applyBoundaryX(x) {
-        return applyBoundary(x, this.sizeX);
+        return this.applyBoundary(x, this.sizeX);
     }
 
     applyBoundaryY(y) {
-        return applyBoundary(y, this.sizeY);
+        return this.applyBoundary(y, this.sizeY);
     }
 
     getDrawer(canvas) {
         return new Drawer(canvas, this.sizeX, this.sizeY);
+    }
+
+    tick() {
+        this.boxedSnakes.forEach(boxedSnake => boxedSnake.snake.tick(boxedSnake.move));
     }
 
     show(drawer) {
@@ -148,12 +194,11 @@ class World {
 
         for (let x = 0; x < this.sizeX; x++) {
             for (let y = 0; y < this.sizeY; y++) {
-                // ctx.fillRect(x*strideX+border/2, y*strideY+border/2, strideX-border, strideY-border);
                 drawer.drawCell(x, y, Colors.Background);
             }
         }
 
-        this.snakes.forEach(snake => snake.show(drawer));
+        this.boxedSnakes.forEach(boxedSnake => boxedSnake.snake.show(drawer));
         this.apples.forEach(apple => apple.show(drawer));
     }
 }
@@ -182,3 +227,21 @@ let world = new World(30, 30);
 let cnvs = document.getElementById("snakeCanvas");
 let drawer = world.getDrawer(cnvs);
 world.show(drawer);
+
+setInterval(() => {
+    // world.boxedSnakes[0].move = Direction.Up
+    world.tick();
+    world.show(drawer);
+}, 500)
+
+document.addEventListener('keydown', (event) => {
+    if (event.keyCode === 37) {
+        world.boxedSnakes[0].move = Direction.Left;
+    } else if (event.keyCode === 38) {
+        world.boxedSnakes[0].move = Direction.Up;
+    } else if (event.keyCode === 39) {
+        world.boxedSnakes[0].move = Direction.Right;
+    } else if (event.keyCode === 40) {
+        world.boxedSnakes[0].move = Direction.Down;
+    }
+});
